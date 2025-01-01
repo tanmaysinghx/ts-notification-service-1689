@@ -1,10 +1,12 @@
 import express from 'express';
 import cors from 'cors';
 import notificationRoutes from './routes/notificationRoutes';
+import { loggerConsole } from './middleware/loggerConsole';
+import { transactionIdMiddleware } from './middleware/transactionIdMiddleware';
 
 const app = express();
 
-//app.use(transactionIdMiddleware);
+app.use(transactionIdMiddleware);
 
 app.use(cors({
     origin: '*',
@@ -14,8 +16,8 @@ app.use(cors({
 }));
 
 app.use(express.json());
-//app.use(loggerConsole);
+app.use(loggerConsole);
 
-app.use('/api', notificationRoutes);
+app.use('/v2/api', notificationRoutes);
 
 export default app;

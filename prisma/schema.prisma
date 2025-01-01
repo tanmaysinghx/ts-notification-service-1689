@@ -22,10 +22,11 @@ model NotificationLog {
   sentAt     DateTime @default(now())
 }
 
-model EmailTemplate {
-  id         Int    @id @default(autoincrement())
-  gearId     String
-  scenarioId String
-  subject    String
-  content    String
+model Otp {
+  id          Int      @id @default(autoincrement())
+  email       String
+  otpCode     String
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
+  isVerified  Boolean  @default(false)
 }

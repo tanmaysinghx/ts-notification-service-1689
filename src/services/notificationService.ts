@@ -1,39 +1,101 @@
 import { PrismaClient } from '@prisma/client';
 import { sendEmail } from '../utils/emailSender';
-import { generateOtp } from '../utils/otpGenerator';
+import { generateEmailOtp } from '../utils/otpGenerator';
+import { getEmailTemplate } from '../templates/emailTemplates';
 import registrationTemplate from '../templates/registrationTemplate';
 import loginTemplate from '../templates/loginTemplate';
-import { getEmailTemplate } from '../templates/emailTemplates';
 
 const prisma = new PrismaClient();
 
 class NotificationService {
-    static async processEmailNotification({ gearId, scenarioId, userEmail, additionalData }: any): Promise<void> {
-        let subject: string, templateContent: string;
-        switch (scenarioId) {
-            case '00001':
-                subject = 'Your Registration OTP';
-                templateContent = registrationTemplate;
-                break;
-            case '00002':
-                subject = 'Your Login OTP';
-                templateContent = loginTemplate;
-                break;
-            default:
-                const dbTemplate = await prisma.emailTemplate.findFirst({
-                    where: { gearId, scenarioId },
-                });
-                if (!dbTemplate) throw new Error('Template not found for given gearId and scenarioId.');
-                subject = dbTemplate.subject;
-                templateContent = dbTemplate.content;
+    static async processEmailNotification({
+        gearId,
+        scenarioId,
+        userEmail,
+        emailOTP,
+        mobileOTP,
+    }: any): Promise<void> {
+        let templateContent = '';
+        let subject = '';
+        let otp = '';
+        if (scenarioId === '00001') {
+            subject = 'Registration OTP';
+            templateContent = registrationTemplate;
+        } else if (scenarioId === '00002') {
+            subject = 'Login OTP';
+            templateContent = loginTemplate;
+        } else {
+            throw new Error('Scenario ID not supported');
         }
-        const otp = generateOtp();
-        const emailBody = getEmailTemplate(templateContent, { OTP: otp, USER_NAME: additionalData?.userName || 'User' });
-        await sendEmail(userEmail, subject, emailBody);
-        await prisma.notificationLog.create({
-            data: { gearId, scenarioId, userEmail, otp, sentAt: new Date() },
+        const existingOtp = await prisma.otp.findFirst({
+            where: {
+                email: userEmail,
+            },
         });
+        if (existingOtp && new Date(existingOtp.expiresAt) > new Date()) {
+            throw new Error('An OTP has already been generated and is still valid.');
+        }
+        if (existingOtp && new Date(existingOtp.expiresAt) <= new Date()) {
+            await prisma.otp.delete({
+                where: {
+                    id: existingOtp.id,
+                },
+            });
+        }
+        if (emailOTP) {
+            otp = generateEmailOtp();
+        }
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+        await prisma.otp.create({
+            data: {
+                email: userEmail,
+                otpCode: otp,
+                expiresAt,
+            },
+        });
+        const emailBody = getEmailTemplate(templateContent, {
+            OTP: otp,
+            USER_NAME: 'User',
+            COMPANY_NAME: 'TS',
+            SUPPORT_EMAIL: 'tanmaysinghx99@gmail.com',
+            CURRENT_YEAR: '2025'
+        });
+        await sendEmail(userEmail, subject, emailBody);
     }
+
+
+    static async verifyOtp(email: string, otpCode: string): Promise<boolean> {
+        await prisma.otp.deleteMany({
+            where: {
+                email,
+                expiresAt: {
+                    lte: new Date(),
+                },
+            },
+        });
+        const otpRecord = await prisma.otp.findFirst({
+            where: {
+                email,
+                otpCode,
+                isVerified: false,
+                expiresAt: {
+                    gt: new Date(),
+                },
+            },
+        });
+        if (!otpRecord) {
+            throw new Error('Invalid or expired OTP.');
+        }
+        await prisma.otp.update({
+            where: { id: otpRecord.id },
+            data: { isVerified: true },
+        });
+        await prisma.otp.delete({
+            where: { id: otpRecord.id },
+        });
+        return true;
+    }
+
 }
 
 export default NotificationService;
