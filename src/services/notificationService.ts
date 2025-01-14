@@ -14,55 +14,54 @@ class NotificationService {
         userEmail,
         emailOTP,
         mobileOTP,
-    }: any): Promise<void> {
-        let templateContent = '';
-        let subject = '';
-        let otp = '';
-        if (scenarioId === '00001') {
-            subject = 'Registration OTP';
-            templateContent = registrationTemplate;
-        } else if (scenarioId === '00002') {
-            subject = 'Login OTP';
-            templateContent = loginTemplate;
-        } else {
-            throw new Error('Scenario ID not supported');
+    }: any): Promise<string> {
+        const scenarios: { [key: string]: { subject: string; template: string } } = {
+            "00001": { subject: "Registration OTP", template: registrationTemplate },
+            "00002": { subject: "Login OTP", template: loginTemplate },
+        };
+        const scenario = scenarios[scenarioId];
+        if (!scenario) {
+            throw new Error(`Scenario ID '${scenarioId}' not supported`);
         }
-        const existingOtp = await prisma.otp.findFirst({
-            where: {
-                email: userEmail,
-            },
-        });
-        if (existingOtp && new Date(existingOtp.expiresAt) > new Date()) {
-            throw new Error('An OTP has already been generated and is still valid.');
+        let otp = "";
+        let actions = [];
+        const existingOtp = await prisma.otp.findFirst({ where: { email: userEmail } });
+        if (existingOtp) {
+            const isOtpValid = new Date(existingOtp.expiresAt) > new Date();
+            if (isOtpValid) {
+                throw new Error("An OTP is already valid and will expire in 10 minutes.");
+            } else {
+                await prisma.otp.delete({ where: { id: existingOtp.id } });
+            }
         }
-        if (existingOtp && new Date(existingOtp.expiresAt) <= new Date()) {
-            await prisma.otp.delete({
-                where: {
-                    id: existingOtp.id,
-                },
-            });
-        }
+
         if (emailOTP) {
             otp = generateEmailOtp();
+            const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+            await prisma.otp.create({
+                data: {
+                    email: userEmail,
+                    otpCode: otp,
+                    expiresAt,
+                },
+            });
+            const emailBody = getEmailTemplate(scenario.template, {
+                OTP: otp,
+                USER_NAME: "User",
+                COMPANY_NAME: "TS",
+                SUPPORT_EMAIL: "tanmaysinghx99@gmail.com",
+                CURRENT_YEAR: new Date().getFullYear().toString(),
+            });
+            await sendEmail(userEmail, scenario.subject, emailBody);
+            actions.push(`Email OTP sent to ${userEmail}`);
         }
-        const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-        await prisma.otp.create({
-            data: {
-                email: userEmail,
-                otpCode: otp,
-                expiresAt,
-            },
-        });
-        const emailBody = getEmailTemplate(templateContent, {
-            OTP: otp,
-            USER_NAME: 'User',
-            COMPANY_NAME: 'TS',
-            SUPPORT_EMAIL: 'tanmaysinghx99@gmail.com',
-            CURRENT_YEAR: '2025'
-        });
-        await sendEmail(userEmail, subject, emailBody);
-    }
+        if (mobileOTP) {
+            // Implement mobile OTP logic here
+            actions.push(`Mobile OTP sent`);
+        }
 
+        return actions.join(" and ");
+    }
 
     static async verifyOtp(email: string, otpCode: string): Promise<boolean> {
         await prisma.otp.deleteMany({

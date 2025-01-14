@@ -12,13 +12,26 @@ class NotificationController {
         try {
             const { gearId, scenarioId, userEmail, emailOTP, mobileOTP } = req.body;
             if (!gearId || !scenarioId || !userEmail) {
-                res.status(400).json(errorResponse("Error", "Missing required fields.", transactionId,));
+                res.status(400).json(errorResponse("Error", "Missing required fields.", transactionId));
                 return;
             }
-            await NotificationService.processEmailNotification({ gearId, scenarioId, userEmail, emailOTP, mobileOTP });
-            res.status(201).json(successResponse("Success", "Notification sent successfully.'", transactionId));
+            const notificationDetails = await NotificationService.processEmailNotification({
+                gearId,
+                scenarioId,
+                userEmail,
+                emailOTP,
+                mobileOTP,
+            });
+            res.status(201).json(
+                successResponse(
+                    "Success",
+                    `Notification sent successfully. ${notificationDetails}`,
+                    transactionId
+                )
+            );
         } catch (error: any) {
-            res.status(500).json(errorResponse("Error", error, transactionId,));
+            const errorMessage = error.message || "An unexpected error occurred.";
+            res.status(500).json(errorResponse("Error", errorMessage, transactionId));
         }
     }
 
