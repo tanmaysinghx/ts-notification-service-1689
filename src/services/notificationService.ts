@@ -4,6 +4,7 @@ import { generateEmailOtp } from '../utils/otpGenerator';
 import { getEmailTemplate } from '../templates/emailTemplates';
 import registrationTemplate from '../templates/registrationTemplate';
 import loginTemplate from '../templates/loginTemplate';
+import passwordChangeTemplate from '../templates/passwordChangeTemplate';
 
 const prisma = new PrismaClient();
 
@@ -18,6 +19,7 @@ class NotificationService {
         const scenarios: { [key: string]: { subject: string; template: string } } = {
             "00001": { subject: "Registration OTP", template: registrationTemplate },
             "00002": { subject: "Login OTP", template: loginTemplate },
+            "00003": { subject: "Password Change OTP", template: passwordChangeTemplate },
         };
         const scenario = scenarios[scenarioId];
         if (!scenario) {
